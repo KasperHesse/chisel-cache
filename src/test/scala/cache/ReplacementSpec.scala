@@ -53,7 +53,7 @@ class ReplacementSpec extends AnyFlatSpec with ChiselScalatestTester{
     }
   }
 
-  it should "keep we signals constant when memValid is not asserted" in {
-    ???
-  }
+//  it should "keep we signals constant when memValid is not asserted" in {
+//    ???
+//  }
 }
