@@ -41,6 +41,22 @@ The replacement module is used to choose which cache block a load should
 go into when a way-separated cache is being used. When the cache is direct-mapped,
 the replacement is simple, as only one memory block is used.
 
+I/O ports into replacement
+- mem.valid: when mem.valid=true, we combinatorially assert signals into controller/cache
+- proc.addr: Use proc.addr to determine indices -> which to replace
+
+When memory.valid goes high, start processing read data
+
+
+I/O ports between replacement and cache
+- we: Vec: Which blocks should have data read into them
+- valid: Bool: When high, writes data into blocks
+- select: Vec: Selects which memory block should be written into
+
+I/O ports between replacement and controller
+- index: Used to index into LRU array
+- finish: Indicates that a full block of cache has been loaded
+
 # Structure
 - ache holds memory block that is the cache itself. 
 - The controller contains an FSM used to control the cache and replacement module, as well as dirty/valid bits
@@ -88,4 +104,5 @@ General outline as above
 - Create state FSM in controller ALMOST OK
 - When fetching data, FSM should issue the required number of reads
 - It should then enter a waiting state, until replacement module has noticed that all read data
-  has arrived. Replacement module should notify controller, which will then change state
+  has arrived. 
+  - Replacement module should notify controller, which will then change state

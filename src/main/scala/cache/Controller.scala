@@ -42,7 +42,7 @@ class Controller(c: CacheConfig) extends Module {
 
   val memReadsIssued = RegInit(0.U(log2Ceil((c.wordsPerBlock*c.wordWidth)/c.cacheMemWidth+1).W))
 
-  val validRead = tags(index) === tag && valid(index)
+  val validData = tags(index) === tag && valid(index)
   //Next state logic
   switch(state) {
     //Idle state: Move out when a valid operation is received
@@ -55,9 +55,9 @@ class Controller(c: CacheConfig) extends Module {
     //If read && data is already stored in cache, return that data on next cc
     //If read && data is not already stored, go fetch that data
     is(sOp) {
-      when(io.rw && validRead) {
+      when(!io.we && validData) {
         state := sRead
-      } .elsewhen(io.rw && !validRead) {
+      } .elsewhen(!io.we && !validData) {
         state := sFetch
       } .otherwise { //TODO: Implement write behaviour
         state := sIdle
@@ -67,9 +67,9 @@ class Controller(c: CacheConfig) extends Module {
     //If another read for valid data follows, stay here
     //If another read for invalid data follows, go to fetch
     is(sRead) {
-      when(io.procValid && validRead && io.rw) {
+      when(io.procValid && validData && !io.we) {
         state := sRead
-      } .elsewhen(io.procValid && io.rw) {
+      } .elsewhen(io.procValid && !io.we) {
         state := sFetch
       } .otherwise { //TODO should go to op-state if operation is a write
         state := sIdle

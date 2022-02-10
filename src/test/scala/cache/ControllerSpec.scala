@@ -17,7 +17,7 @@ class ControllerSpec extends AnyFlatSpec with ChiselScalatestTester {
       dut.io.memReady
       //Setup inputs
       dut.io.addr.poke(0.U)
-      dut.io.rw.poke(true.B)
+      dut.io.we.poke(false.B)
       dut.io.procValid.poke(true.B)
       dut.clock.step()
 
