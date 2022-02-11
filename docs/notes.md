@@ -94,15 +94,3 @@ General outline as above
   processor operations. If another cache operation is started while the 
   cache is busy processing a request, a signal TBD should instruct the
   processor to stall.
-
-
-# Work
-## Implement read-behaviour
-- Declare memory in cache OK
-- Set up read accessor based on addr OK
-- Declare tag, dirty, valid bits in controller OK
-- Create state FSM in controller ALMOST OK
-- When fetching data, FSM should issue the required number of reads
-- It should then enter a waiting state, until replacement module has noticed that all read data
-  has arrived. 
-  - Replacement module should notify controller, which will then change state

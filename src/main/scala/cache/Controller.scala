@@ -4,30 +4,22 @@ import chisel3._
 import chisel3.util._
 
 class Controller(c: CacheConfig) extends Module {
-  val io = IO(new CacheControllerIO(c))
+  val io = IO(new ControllerIO(c))
 
   val sIdle :: sOp :: sRead :: sFetch :: Nil = Enum(4)
   val state = RegInit(sIdle)
 
-  //Cache access signals
-  /** Number of entries in cache */
-  val numEntries = c.numWords / c.wordsPerBlock
-  /** Low index bit */
-  val indexL = log2(c.wordsPerBlock*c.wordWidth/8).toInt
-  /** High index bit */
-  val indexH = indexL + log2(numEntries).toInt - 1
-  /** Index value */
-  val index = io.addr(indexH, indexL)
-  /** Tag value */
-  val tag = io.addr(c.wordWidth-1, indexH+1)
+
+  val index = io.addr(c.indexH, c.indexL)
+  val tag = io.addr(c.tagH, c.tagL)
 
   //Metadata registers
   /** Dirty bit register */
-  val dirty = RegInit(VecInit(Seq.fill(numEntries)(false.B)))
+  val dirty = RegInit(VecInit(Seq.fill(c.numEntries)(false.B)))
   /** Valid bit register */
-  val valid = RegInit(VecInit(Seq.fill(numEntries)(false.B)))
+  val valid = RegInit(VecInit(Seq.fill(c.numEntries)(false.B)))
   /** Tag register */
-  val tags = RegInit(VecInit(Seq.fill(numEntries)(0.U(log2Ceil(c.wordWidth-indexH).W))))
+  val tags = RegInit(VecInit(Seq.fill(c.numEntries)(0.U(log2Ceil(c.wordWidth-c.indexH).W))))
 
   //Output signals
   /** Ready signal back to processor, signalling read data can be sampled */
@@ -37,17 +29,17 @@ class Controller(c: CacheConfig) extends Module {
 
 
   //Helper signals
-  /** Base address of block: Tag + index bits, but lSB all set to 0 */
-  val blockBaseAddr = Cat(io.addr(c.wordWidth-1, indexL), 0.U(indexL.W))
+  /** Base address of block: Tag + index bits, but block and byte offset set to 0 */
+  val blockBaseAddr = Cat(io.addr(c.wordWidth-1, c.indexL), 0.U(c.indexL.W))
 
-  val memReadsIssued = RegInit(0.U(log2Ceil((c.wordsPerBlock*c.wordWidth)/c.cacheMemWidth+1).W))
+  val memReadsIssued = RegInit(0.U(log2Ceil(c.memAccesesPerBlock+1).W))
 
   val validData = tags(index) === tag && valid(index)
   //Next state logic
   switch(state) {
     //Idle state: Move out when a valid operation is received
     is(sIdle) {
-      when(io.procValid) {
+      when(io.procReq) {
         state := sOp
       }
     }
@@ -67,9 +59,9 @@ class Controller(c: CacheConfig) extends Module {
     //If another read for valid data follows, stay here
     //If another read for invalid data follows, go to fetch
     is(sRead) {
-      when(io.procValid && validData && !io.we) {
+      when(io.procReq && validData && !io.we) {
         state := sRead
-      } .elsewhen(io.procValid && !io.we) {
+      } .elsewhen(io.procReq && !io.we) {
         state := sFetch
       } .otherwise { //TODO should go to op-state if operation is a write
         state := sIdle
@@ -78,9 +70,12 @@ class Controller(c: CacheConfig) extends Module {
     //Fetch data from memory state
     //Once data arrives, go to op-state and reset count register
     is(sFetch) {
-      when(io.memReady) {
+      when(io.replacement.finish) {
         state := sOp
         memReadsIssued := 0.U
+        valid(index) := true.B
+        tags(index) := tag
+
       }
     }
   }
@@ -93,15 +88,14 @@ class Controller(c: CacheConfig) extends Module {
     }
     //Issue the required number of reads, then wait until we leave this state
     //Assuming that we can issue reads immediately when we enter this state
+    //Reads will be stored in a FIFO while waiting to be processed by bus
     is(sFetch) {
-      memReadsIssued := Mux(memReadsIssued === ((c.wordsPerBlock*c.wordWidth)/c.cacheMemWidth).U, memReadsIssued, memReadsIssued + 1.U)
-      memValid := memReadsIssued < ((c.wordsPerBlock*c.wordWidth)/c.cacheMemWidth).U
+      memReadsIssued := Mux(memReadsIssued === c.memAccesesPerBlock.U, memReadsIssued, memReadsIssued + 1.U)
+      memValid := memReadsIssued < c.memAccesesPerBlock.U
     }
   }
 
-  //Outputs
-  io.index := index
-  io.procReady := readyReadData
-  io.memValid := memValid
+  io.procAck := readyReadData
+  io.memReq := memValid
   io.memReadAddress := blockBaseAddr + (memReadsIssued << log2Ceil(c.cacheMemWidth/8).U)
 }

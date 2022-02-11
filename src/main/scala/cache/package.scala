@@ -21,13 +21,63 @@ package object cache {
     require(isPow2(wordsPerBlock), "Number of data words per block must be a power of 2")
     require(numWords >= wordsPerBlock, "Number of data words must be >= number of words per block")
     require(isPow2(wordWidth), "Word width must be a power of 2")
+
+    /** Number of memory accesses that must be completed to fetch an entire block */
+    val memAccesesPerBlock = wordsPerBlock*wordWidth/cacheMemWidth
+    /** Number of bytes in a dataword */
+    val bytesPerWord = log2Ceil(wordWidth/8)
+    /** Number of entries in the cache */
+    val numEntries = numWords / wordsPerBlock
+    /** Low index bit */
+    val indexL = log2Ceil(wordsPerBlock*wordWidth/8)
+    /** High index bit */
+    val indexH = indexL + log2Ceil(numEntries) - 1
+    /** Low block offset bit */
+    val blockL = bytesPerWord
+    /** High block offset bit */
+    val blockH = indexL - 1
+    /** Low tag bit */
+    val tagL = indexH + 1
+    /** High tag bit */
+    val tagH = wordWidth-1
+
   }
 
+  /**
+   * An I/O bundle with a request/acknowledge signal.
+   * The request signal should be pulled high when the producer wants the slave
+   * to process a request, and the acknowledge signal is pulled high by the slave
+   * when the request has been acknowledged (and potentiel read data is valid)
+   * @param gen The type of data to be wrapped in the req/ack handshake
+   * @tparam T
+   */
+  class ReqAck[+T <: Data](gen: T) extends Bundle {
+    /** Request signal from producer to consumer */
+    val req = Output(Bool())
+    /** Acknowledge signal from consumer to producer */
+    val ack = Input(Bool())
+    /** The data wrapped by this req/ack handshake */
+    val bits = gen
+  }
+
+  /** Helper object that can be used to wrap some data with a [[ReqAck]] handshake */
+  object ReqAck {
+    def apply[T <: Data](gen: T): ReqAck[T] = new ReqAck(gen)
+  }
+
+  /**
+   * I/O ports for the cache module
+   * @param config
+   */
   class CacheIO(config: CacheConfig) extends Bundle {
-    val proc = Flipped(Decoupled(new ProcessorCacheIO(config)))
-    val mem = Decoupled(new CacheMemIO(config))
+    val proc = Flipped(ReqAck(new ProcessorCacheIO(config)))
+    val mem = ReqAck(new CacheMemIO(config))
   }
 
+  /**
+   * I/O ports for the replacement module
+   * @param config
+   */
   class ReplacementIO(config: CacheConfig) extends Bundle {
     val controller = Flipped(new ControllerReplacementIO(config))
     val cache = new ReplacementCacheIO(config)
@@ -39,8 +89,6 @@ package object cache {
    * @param config
    */
   class ControllerReplacementIO(config: CacheConfig) extends Bundle {
-    /** Index currently being accessed in cache */
-    val index: UInt = Output(UInt(log2Ceil(config.numWords/config.wordsPerBlock).W))
     /** High for one cc when a cache block has been replaced */
     val finish: Bool = Input(Bool())
   }
@@ -53,47 +101,35 @@ package object cache {
   class ReplacementCacheIO(config: CacheConfig) extends Bundle {
     /** Write-enable signals for each word in cache block */
     val we: Vec[Bool] = Output(Vec(config.wordsPerBlock, Bool()))
-    /** Selector indicating which cache block should be replaced */
+    /** Selector indicating which cache set should be replaced */
     val select: UInt = Output(UInt(2.W))
-    /** Asserted when valid data has arrived from cache */
-    val memValid: Bool = Input(Bool())
+    /** Asserted when valid data has arrived from memory */
+    val memAck: Bool = Input(Bool())
   }
 
-  class CacheControllerIO(config: CacheConfig) extends Bundle {
+  class ControllerIO(config: CacheConfig) extends Bundle {
     /** Read/write data address */
     val addr = Input(UInt(config.addrWidth.W))
     /** Valid operation signal from processor */
-    val procValid = Input(Bool())
+    val procReq = Input(Bool())
     /** Write enable high / read enable low */
     val we = Input(Bool())
     /** Read data is ready to be sampled */
-    val procReady = Output(Bool())
+    val procAck = Output(Bool())
     /** Valid operation signal to memory */
-    val memValid = Output(Bool())
+    val memReq = Output(Bool())
     /** Memory read address */
     val memReadAddress = Output(UInt(config.addrWidth.W))
-    /** Read data from memory coming in */
-    val memReady = Input(Bool())
-    /** Cache index to be accessed */
-    val index = Output(UInt(log2Ceil(config.numWords/config.wordsPerBlock+1).W))
+    /** I/O ports to replacement module */
+    val replacement = new ControllerReplacementIO(config)
 
   }
-
-  /**
-   * Returns the log2 of a number.
-   * @param x The value to get the log2 of
-   * @return log2(x)
-   */
-  def log2(x: Double): Double = Math.log(x)/Math.log(2.0)
 
   /**
    * I/O ports between cache and memory
    * Instantiate as-is in cache, use Flipped() in memory
    */
   class CacheMemIO(c: CacheConfig) extends Bundle {
-    require(c.cacheMemWidth >= c.wordWidth, "Width of cache-to-memory bus must be at least the size of a word")
-    require(c.cacheMemWidth % c.wordWidth == 0, "cache-to-memory bus width must be multiple of data word width")
-
     /** Write data from cache */
     val wrData = Output(UInt(c.cacheMemWidth.W))
     /** Read data to cache */
