@@ -2,7 +2,7 @@
 
 ## Cache
 The initial cache design is a direct-mapped cache only supporting word-aligned access.
-But, it should hopefully become a modular cache that supports N-way cache structure,
+But, it should hocalcpefully become a modular cache that supports N-way cache structure,
 as well as non-aligned memory accesses. We'll see how difficult that is.
 
 Initial layout:
@@ -15,8 +15,8 @@ Initial layout:
 Using the above, we get
 - 2 bits for byte offset
 - 2 bits for block offset
-- 7 bits for index
-- 21 bits for tag
+- 8 bits for index
+- 20 bits for tag
 
 
 ## Cache controller

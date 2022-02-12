@@ -64,5 +64,4 @@ class Cache(c: CacheConfig) extends Module {
 
   io.mem.bits.we := false.B //Only reading from memory right now
   io.mem.bits.wrData := 0.U //Not writing to memory to right now
-
 }

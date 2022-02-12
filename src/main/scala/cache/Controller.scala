@@ -19,7 +19,7 @@ class Controller(c: CacheConfig) extends Module {
   /** Valid bit register */
   val valid = RegInit(VecInit(Seq.fill(c.numEntries)(false.B)))
   /** Tag register */
-  val tags = RegInit(VecInit(Seq.fill(c.numEntries)(0.U(log2Ceil(c.wordWidth-c.indexH).W))))
+  val tags = RegInit(VecInit(Seq.fill(c.numEntries)(0.U((c.tagH-c.tagL+1).W))))
 
   //Output signals
   /** Ready signal back to processor, signalling read data can be sampled */

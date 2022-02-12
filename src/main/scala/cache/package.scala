@@ -41,6 +41,23 @@ package object cache {
     /** High tag bit */
     val tagH = wordWidth-1
 
+//    print(
+//      f"""Configuration created
+//        |numWords:$numWords
+//        |worsPerBlock:$wordsPerBlock
+//        |cacheMemWidth:$cacheMemWidth
+//        |wordWidth:$wordWidth
+//        |addrWidth:$addrWidth
+//        |mapping:$mapping
+//        |memAccesesPerBlock:$memAccesesPerBlock
+//        |bytesPerWord:$bytesPerWord
+//        |numEntries:$numEntries
+//        |indexL:$indexL
+//        |indexH:$indexH
+//        |blockL:$blockL
+//        |blockH:$blockH
+//        |tagL:$tagL
+//        |tagH:$tagH""".stripMargin)
   }
 
   /**
