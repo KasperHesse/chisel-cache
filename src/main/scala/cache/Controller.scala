@@ -35,6 +35,22 @@ class Controller(c: CacheConfig) extends Module {
   val memReadsIssued = RegInit(0.U(log2Ceil(c.memAccesesPerBlock+1).W))
 
   val validData = tags(index) === tag && valid(index)
+
+  //Output generation logic
+  switch(state) {
+    //Assert readyReadData high to signal to processor that data has arrived
+    is(sRead) {
+      readyReadData := true.B
+    }
+    //Issue the required number of reads, then wait until we leave this state
+    //Assuming that we can issue reads immediately when we enter this state
+    //Reads will be stored in a FIFO while waiting to be processed by bus
+    is(sFetch) {
+      memReadsIssued := Mux(memReadsIssued === c.memAccesesPerBlock.U, memReadsIssued, memReadsIssued + 1.U)
+      memValid := memReadsIssued < c.memAccesesPerBlock.U
+    }
+  }
+
   //Next state logic
   switch(state) {
     //Idle state: Move out when a valid operation is received
@@ -77,21 +93,6 @@ class Controller(c: CacheConfig) extends Module {
         tags(index) := tag
 
       }
-    }
-  }
-
-  //Output generation logic
-  switch(state) {
-    //Assert readyReadData high to signal to processor that data has arrived
-    is(sRead) {
-      readyReadData := true.B
-    }
-    //Issue the required number of reads, then wait until we leave this state
-    //Assuming that we can issue reads immediately when we enter this state
-    //Reads will be stored in a FIFO while waiting to be processed by bus
-    is(sFetch) {
-      memReadsIssued := Mux(memReadsIssued === c.memAccesesPerBlock.U, memReadsIssued, memReadsIssued + 1.U)
-      memValid := memReadsIssued < c.memAccesesPerBlock.U
     }
   }
 
