@@ -127,13 +127,13 @@ package object cache {
   class ControllerIO(config: CacheConfig) extends Bundle {
     /** Read/write data address */
     val addr = Input(UInt(config.addrWidth.W))
-    /** Valid operation signal from processor */
+    /** Request signal from processor */
     val procReq = Input(Bool())
     /** Write enable high / read enable low */
     val we = Input(Bool())
-    /** Read data is ready to be sampled */
+    /** Acknowledge that read data is ready to be sampled */
     val procAck = Output(Bool())
-    /** Valid operation signal to memory */
+    /** Memory request to memory */
     val memReq = Output(Bool())
     /** Memory read address */
     val memReadAddress = Output(UInt(config.addrWidth.W))

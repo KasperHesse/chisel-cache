@@ -3,13 +3,14 @@ package cache
 import chisel3._
 import chisel3.util._
 
+/** Replacement module implementing the replacement policy for the cache */
 class Replacement(c: CacheConfig) extends Module{
   val io = IO(new ReplacementIO(c))
 
-  //Number of data words that are written on each cycle
+  //Number of data words that are retrieved from memory on each cycle
   val WORDS_PER_CYCLE = c.cacheMemWidth/c.wordWidth
 
-  //Each cache block takes wordsPerBlock*wordWidth/cacheMemWidth cycles to replace
+  //Each cache block takes c.memAccessesPerBlock cycles to replace
   val progress = RegInit(0.U(log2Ceil(c.memAccesesPerBlock+1).W))
 
   //Each word in cache block gets a write-enable signal

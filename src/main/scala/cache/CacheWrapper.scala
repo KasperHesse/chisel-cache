@@ -5,6 +5,7 @@ import chisel3.util.experimental.loadMemoryFromFile
 import chisel3.util._
 
 import java.io.{BufferedWriter, FileWriter}
+
 /**
  * A wrapper module around the cache, hooking the cache up to a memory block
  * Primarily used for testing cache behaviour
@@ -15,7 +16,7 @@ class CacheWrapper(c: CacheConfig) extends Module {
   //The cache
   val cache = Module(new Cache(c))
   //The memory that the cache is hooked up to
-  val mem = SyncReadMem(math.pow(2,10).toInt, UInt(c.cacheMemWidth.W))
+  val mem = SyncReadMem(math.pow(2,15).toInt, UInt(c.cacheMemWidth.W))
 
   //Generate meminit file and hook up
   CacheWrapper(c)
@@ -35,6 +36,9 @@ class CacheWrapper(c: CacheConfig) extends Module {
   cache.io.proc.bits.addr := io.bits.addr
   cache.io.proc.bits.we := io.bits.we
   cache.io.proc.bits.wrData := io.bits.wrData
+
+
+  //TODO We must be able to modify addr without modifying output data on the same cc
   io.bits.rdData := cache.io.proc.bits.rdData
   io.ack := cache.io.proc.ack
 }
@@ -51,7 +55,7 @@ object CacheWrapper extends App {
   def apply(c: CacheConfig): Unit = {
     val file = new BufferedWriter(new FileWriter("cachewrappermeminit.txt"))
     val zeros = "0"*16
-    for(i <- 0 until math.pow(2,10).toInt) {
+    for(i <- 0 until math.pow(2,15).toInt) {
       val w = (zeros + i.toHexString).takeRight(c.cacheMemWidth/4)
       file.write(f"$w\n")
     }

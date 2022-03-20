@@ -5,6 +5,8 @@ import chisel3.util.log2Ceil
 import chiseltest._
 import org.scalatest.flatspec.AnyFlatSpec
 
+import scala.collection.mutable
+
 
 /**
  * A class wrapping a dut cache and a software model of the cache
@@ -12,15 +14,23 @@ import org.scalatest.flatspec.AnyFlatSpec
  * @param c
  */
 class CacheSimulator(dut: CacheWrapper, c: CacheConfig) {
-  val cache = Array.ofDim[BigInt](c.numEntries, c.wordsPerBlock)
+
+
+  /** Tag values, for comparison */
   val tags = Array.ofDim[BigInt](c.numEntries)
+  /** Dirty bits, for comparison */
   val dirty = Array.fill[Boolean](c.numEntries)(false)
+  /** Valid bits, for comparison */
   val valid = Array.fill[Boolean](c.numEntries)(false)
-  val mem = Array.tabulate[BigInt](math.pow(2,10).toInt)(n => BigInt(n))
+  /** Memory contents, for comparison. Simulating 1KB of memory */
+//  val mem = Array.tabulate[BigInt](math.pow(2,10).toInt)(n => BigInt(n))
+
+  val mem = mutable.Map[Int, BigInt]()
 
   var hit = 0
   var miss = 0
 
+  //Initial simulation setup
   dut.clock.setTimeout(100)
   dut.io.bits.we.poke(false.B)
   dut.io.req.poke(false.B)
@@ -36,24 +46,18 @@ class CacheSimulator(dut: CacheWrapper, c: CacheConfig) {
     val tag   = addr >> c.tagL
     val index = (addr & ((1 << c.indexH+1) - 1)) >> c.indexL
     val block = (addr & ((1 << c.blockH+1) - 1)) >> c.blockL
-    println(f"Read from addr=$addr. tag=$tag index=$index, block=$block")
+    val blockBaseAddr = (addr >> c.indexL) << log2Ceil(c.wordsPerBlock) //mask out lower bits, right-shift again to get correct memory index)
     if(!(valid(index) && tags(index) == tag) || (tags(index) != tag)) { //Non-valid data
       miss += 1
       //Fetch from memory
-      val blockBaseAddr = (addr >> c.indexL) << log2Ceil(c.wordsPerBlock) //mask out lower bits, right-shift again to get correct memory index
-      for(i <- 0 until c.memAccesesPerBlock) {
-        if(c.wordWidth == c.cacheMemWidth) {
-          cache(index)(i) = mem(blockBaseAddr + i)
-        } else {
-          ???
-        }
-      }
       valid(index) = true
       tags(index) = tag
     } else {
       hit += 1
     }
-    cache(index)(block)
+    val r = mem.getOrElseUpdate(blockBaseAddr + block, BigInt(blockBaseAddr + block))
+    println(f"READ  addr=$addr%5d. tag=$tag%3d index=$index%3d, block=$block, data=$r")
+    r
   }
 
   def issueRead(addr: Int): Unit = {
@@ -77,6 +81,32 @@ class CacheSimulator(dut: CacheWrapper, c: CacheConfig) {
     }
   }
 
+  def issueWrite(addr: Int, data: BigInt): Unit = {
+    val tag   = addr >> c.tagL
+    val index = (addr & ((1 << c.indexH+1) - 1)) >> c.indexL
+    val block = (addr & ((1 << c.blockH+1) - 1)) >> c.blockL
+    val blockBaseAddr = (addr >> c.indexL) << log2Ceil(c.wordsPerBlock) //mask out lower bits, right-shift again to get correct memory index)
+    println(f"WRITE addr=$addr%5d. tag=$tag%3d index=$index%3d, block=$block, data=$data")
+    timescope {
+      dut.io.bits.addr.poke(addr.U)
+      dut.io.bits.we.poke(true.B)
+      dut.io.bits.wrData.poke(data.U)
+      dut.io.req.poke(true.B)
+
+      //Always requires at least one cc
+      dut.clock.step()
+
+      while(!dut.io.ack.peek().litToBoolean) {
+        dut.clock.step()
+      }
+      mem.update(blockBaseAddr + block, data)
+    }
+  }
+
+  def issueWrite(addr: Int): Unit = {
+    this.issueWrite(addr, BigInt(addr))
+  }
+
   def stats(): Unit = {
     println(
       f"""End-of-simulation statistics
@@ -89,6 +119,7 @@ class CacheSimulator(dut: CacheWrapper, c: CacheConfig) {
 class CacheWrapperSpec extends AnyFlatSpec with ChiselScalatestTester {
 
   def cacheSpec(config: CacheConfig): Unit = {
+    /** Simple test to verify that we can read from the lower addresses */
     it should "read data" in {
       test(new CacheWrapper(config)) { dut =>
         val sim = new CacheSimulator(dut, config)
@@ -101,14 +132,29 @@ class CacheWrapperSpec extends AnyFlatSpec with ChiselScalatestTester {
       }
     }
 
+    it should "write to a valid cache block" in {
+      test(new CacheWrapper(config)) {dut =>
+        val sim = new CacheSimulator(dut, config)
+        sim.issueRead(4)
+        sim.issueWrite(8)
+        sim.issueWrite(12)
+        sim.issueRead(8)
+        sim.issueRead(12)
+      }
+    }
+
+    /** Simple test to verify that we can read from different cache indices */
     it should "read from two different indices in a row" in {
       test(new CacheWrapper(config)) { dut =>
         val sim = new CacheSimulator(dut,config)
+        //TODO Update to use config.indexL to generate addresses
         sim.issueRead(16)
         sim.issueRead(32)
       }
     }
 
+
+    /** Simple test to verify read behaviour with delays (does it correctly return to idle state?) */
     it should "read from two different indices with a delay between them" in {
       test(new CacheWrapper(config)) { dut =>
         val sim = new CacheSimulator(dut,config)
@@ -118,12 +164,21 @@ class CacheWrapperSpec extends AnyFlatSpec with ChiselScalatestTester {
       }
     }
 
+    it should "read from two indexes in alternating order" in {
+      test(new CacheWrapper(config)).withAnnotations(Seq(WriteVcdAnnotation)) {dut =>
+        val sim = new CacheSimulator(dut, config)
+        sim.issueRead(760)
+        sim.issueRead(796)
+        sim.issueRead(760)
+      }
+    }
+
+    /** Simple test to verify read behaviour to multiple different addresses */
     it should "handle a series of random reads" in {
       test(new CacheWrapper(config)){ dut =>
         val sim = new CacheSimulator(dut, config)
         for(_ <- 0 until 50) {
-          //The current memory only holds 2^10 values, so those are the only addresses we will attempt
-          val addr = (scala.util.Random.nextInt(1024)/4)*4 //by div-mul with 4, we get addresses that end in 4
+          val addr = (scala.util.Random.nextInt(math.pow(2,15).toInt)/4)*4 //by div-mul with 4, we get addresses that end in 4
           sim.issueRead(addr)
         }
         sim.stats()

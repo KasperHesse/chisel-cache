@@ -21,20 +21,22 @@ Using the above, we get
 
 ## Cache controller
 Note: Heavily inspired by H&P chapter 5.9, at least for the initial design
+The cache controller is a simple FSM used to control the cache. It generates inputs/outputs to
+cache module and the replacement policy module
 
 The cache assumes the following interface between processor and cache
 - boolean read/write line
 - 32-bit address
 - 32-bit write data from processor
 - 32-bit read data from processor
-- ready/valid handshake
+- request/acknowledge handshake
 
 And assumes the following interface between cache and main memory
 - boolean read/write line
 - 32-bit address
 - 32-bit write data to memory
 - 32-bit read data from memory
-- ready/valid handshake
+- request/acknowledge handshake
 
 ## Replacement
 The replacement module is used to choose which cache block a load should
@@ -45,7 +47,7 @@ I/O ports into replacement
 - mem.valid: when mem.valid=true, we combinatorially assert signals into controller/cache
 - proc.addr: Use proc.addr to determine indices -> which to replace
 
-When memory.valid goes high, start processing read data
+When mem.valid goes high, start processing read data
 
 
 I/O ports between replacement and cache
@@ -58,9 +60,14 @@ I/O ports between replacement and controller
 - finish: Indicates that a full block of cache has been loaded
 
 # Structure
-- ache holds memory block that is the cache itself. 
-- The controller contains an FSM used to control the cache and replacement module, as well as dirty/valid bits
-- The replacement module contains data used for replacement purposes
+- cache holds memory blocks that is the cache itself. 
+- The controller contains an FSM used to control the cache and replacement module, as well as tag data and dirty/valid bits
+- The replacement module contains data used for replacement purposes (LRU?)
+
+## General
+Inputs must be held constant until the clock cycle where the cache returns ack=1
+On that clock cycle, signals may be deasserted, but not before. 
+This is because the cache uses RegNext(input) to select which cache block to read/write from
 
 
 ## Reading
@@ -84,13 +91,34 @@ at the current index matches, and whether the valid bit is set
 - If the field being replaced contains dirty data, we first store that data
 - back into memory, then perform the memory read. 
 
-## Storing
+## Writing
 General outline as above
 - If that address is already stored in cache, modify the data and return to processor
 - If data is not stored, first issue a load, then modify data in cache
   - Loading data follows same procedure as described above
 
-- A write-operation should be possible to execute in parallel with normal
-  processor operations. If another cache operation is started while the 
-  cache is busy processing a request, a signal TBD should instruct the
-  processor to stall.
+# Progress
+
+**Setup**
+ - [x] Create controller
+ - [x] Create replacement module
+ - [x] Create cache module itself
+
+**Reading**   
+ - [x] Read from word-aligned addresses
+   - [x] Issue read on next clock cycle
+   - [x] Issue read after a couple of clock cycles
+ - [ ] Read from non-aligned addresses
+   - [ ] On next clock cycle
+   - [ ] After a couple of cycles
+ - [ ] Mix word-aligned and non-aligned acceses
+
+
+**Writing**
+- [ ] Write to a valid, non-dirty address
+- [ ] Write to a valid, dirty address
+- [ ] Write a non-valid address
+
+**Mixing**
+- [ ] Read after write
+- [ ] Write after read

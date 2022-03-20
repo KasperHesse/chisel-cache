@@ -111,7 +111,4 @@ class CacheSpec extends AnyFlatSpec with ChiselScalatestTester {
     }
   }
 
-//  it should "not write data into cache unless mem.ack is high but no load has been issued" in {
-//
-//  }
 }
