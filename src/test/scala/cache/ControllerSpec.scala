@@ -13,19 +13,14 @@ class ControllerSpec extends AnyFlatSpec with ChiselScalatestTester {
     val step = config.cacheMemWidth/8 //address increments when fetching data
     val numSteps = config.wordWidth*config.wordsPerBlock/config.cacheMemWidth
 
-    test(new Controller(config)).withAnnotations(Seq(WriteVcdAnnotation)) {dut =>
+    test(new Controller(config)) {dut =>
       //Setup inputs
       dut.io.addr.poke(0.U)
       dut.io.we.poke(false.B)
       dut.io.procReq.poke(true.B)
       dut.clock.step()
 
-      //After 1 cc, mem valid and proc ready should both be false
-      dut.io.memReq.expect(false.B)
-      dut.io.procAck.expect(false.B)
-      dut.clock.step()
-
-      //After 1 more cc, we expect memvalid to be true and read addresses to be output
+      //After 1 cc, we expect memvalid to be true and read addresses to be output
       for(i <- 0 until numSteps) {
         dut.io.memReq.expect(true.B)
         dut.io.procAck.expect(false.B)
@@ -55,11 +50,7 @@ class ControllerSpec extends AnyFlatSpec with ChiselScalatestTester {
       dut.io.replacement.finish.poke(true.B) //Signal that mem access is finished
       dut.clock.step()
       dut.io.replacement.finish.poke(false.B)
-      //Should now be in op state - should still not return data
-      dut.io.procAck.expect(false.B)
-      dut.clock.step()
-
-      //Should now be in sRead, should return valid data
+      //Should now be in op state and ack request
       dut.io.procAck.expect(true.B)
     }
   }
