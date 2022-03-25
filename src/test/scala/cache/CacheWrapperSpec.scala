@@ -67,13 +67,11 @@ class CacheSimulator(dut: CacheWrapper, c: CacheConfig) {
       dut.io.bits.we.poke(false.B)
       dut.io.bits.wrData.poke(0.U)
       dut.io.req.poke(true.B)
-
-      //Always requires at least one cc to get new data
-      dut.clock.step()
-
       while (!dut.io.ack.peek().litToBoolean) {
         dut.clock.step()
       }
+      //Always requires at least one cc to get new data
+      dut.clock.step()
 
       val read = this.read(addr)
 
@@ -93,12 +91,12 @@ class CacheSimulator(dut: CacheWrapper, c: CacheConfig) {
       dut.io.bits.wrData.poke(data.U)
       dut.io.req.poke(true.B)
 
-      //Always requires at least one cc
-      dut.clock.step()
-
       while(!dut.io.ack.peek().litToBoolean) {
         dut.clock.step()
       }
+      //Always requires at least one cc
+      dut.clock.step()
+
       mem.update(blockBaseAddr + block, data)
     }
   }
@@ -119,16 +117,32 @@ class CacheSimulator(dut: CacheWrapper, c: CacheConfig) {
 class CacheWrapperSpec extends AnyFlatSpec with ChiselScalatestTester {
 
   def cacheSpec(config: CacheConfig): Unit = {
-    /** Simple test to verify that we can read from the lower addresses */
+
+    // Simple test to verify that we can read from the lower addresses
     it should "read data" in {
       test(new CacheWrapper(config)) { dut =>
         val sim = new CacheSimulator(dut, config)
         sim.issueRead(4)
-        sim.issueRead(0)
-        sim.issueRead(8)
-        sim.issueRead(12)
+      }
+    }
 
-        sim.stats()
+    // Simple test to verify that we can read from different cache indices
+    it should "read from two different indices in a row" in {
+      test(new CacheWrapper(config)) { dut =>
+        val sim = new CacheSimulator(dut,config)
+        //TODO Update to use config.indexL to generate addresses
+        sim.issueRead(16)
+        sim.issueRead(32)
+      }
+    }
+
+    // Simple test to verify read behaviour with delays
+    it should "read from two different indices with a delay between them" in {
+      test(new CacheWrapper(config)).withAnnotations(Seq(WriteVcdAnnotation)) { dut =>
+        val sim = new CacheSimulator(dut,config)
+        sim.issueRead(16)
+        dut.clock.step(3)
+        sim.issueRead(32)
       }
     }
 
@@ -143,24 +157,11 @@ class CacheWrapperSpec extends AnyFlatSpec with ChiselScalatestTester {
       }
     }
 
-    /** Simple test to verify that we can read from different cache indices */
-    it should "read from two different indices in a row" in {
-      test(new CacheWrapper(config)) { dut =>
-        val sim = new CacheSimulator(dut,config)
-        //TODO Update to use config.indexL to generate addresses
-        sim.issueRead(16)
-        sim.issueRead(32)
-      }
-    }
-
-
-    /** Simple test to verify read behaviour with delays (does it correctly return to idle state?) */
-    it should "read from two different indices with a delay between them" in {
-      test(new CacheWrapper(config)) { dut =>
-        val sim = new CacheSimulator(dut,config)
-        sim.issueRead(16)
-        dut.clock.step(3)
-        sim.issueRead(32)
+    it should "write to an invalid, non-dirty cache block" in {
+      test(new CacheWrapper(config)) {dut =>
+        val sim = new CacheSimulator(dut, config)
+        sim.issueWrite(40)
+        sim.issueRead(40)
       }
     }
 

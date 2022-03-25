@@ -37,15 +37,12 @@ class CacheWrapper(c: CacheConfig) extends Module {
   cache.io.proc.bits.we := io.bits.we
   cache.io.proc.bits.wrData := io.bits.wrData
 
-
-  //TODO We must be able to modify addr without modifying output data on the same cc
   io.bits.rdData := cache.io.proc.bits.rdData
   io.ack := cache.io.proc.ack
 }
 
 /**
  * Companion object for the cache wrapper
-
  */
 object CacheWrapper extends App {
   /**

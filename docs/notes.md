@@ -2,7 +2,7 @@
 
 ## Cache
 The initial cache design is a direct-mapped cache only supporting word-aligned access.
-But, it should hocalcpefully become a modular cache that supports N-way cache structure,
+But, it should hopefully become a modular cache that supports N-way cache structure,
 as well as non-aligned memory accesses. We'll see how difficult that is.
 
 Initial layout:
@@ -71,6 +71,25 @@ This is because the cache uses RegNext(input) to select which cache block to rea
 
 
 ## Reading
+Timing diagram shows behavior for a read to a non-cached address. The `we`and `wrData` 
+lines are not shown for simplicity. They are both 0.
+When `req` goes high, an operation is started. It must be kept high until `ack` is returned.
+When `ack`goes high, read data is valid on the **next** clock cycle.
+
+![Read to a non-cached address](single-read.png)
+
+Once a block is cached, subsequent acceses can be performed with a single clock cycle
+latency, as shown below
+
+![Read to a non-cached address followed by cached addresses](multi-read.png)
+
+Notice that once `req` is deasserted, the value of rdData is kept constant.
+
+When writing, the timing behaviour is much the same. The diagram below shows a write
+to a non-cached address, immediately followed by a read to that same address.
+
+![Writing to a non-cached address followed by a read from the same address](read-after-write.png)
+
 When an operation is issued, this is forwarded from the Cache module to 
 the controller module. The controller module will check if the tag
 at the current index matches, and whether the valid bit is set

@@ -6,8 +6,8 @@ import chisel3.util._
 class Controller(c: CacheConfig) extends Module {
   val io = IO(new ControllerIO(c))
 
-  val sIdle :: sOp :: sRead :: sFetch :: sWrite :: Nil = Enum(5)
-  val state = RegInit(sIdle)
+  val sOp :: sFetch :: sWriteback :: Nil = Enum(3)
+  val state = RegInit(sOp)
 
 
   val index = io.addr(c.indexH, c.indexL)
@@ -22,7 +22,7 @@ class Controller(c: CacheConfig) extends Module {
   val tags = RegInit(VecInit(Seq.fill(c.numEntries)(0.U((c.tagH-c.tagL+1).W))))
 
   //Output signals
-  /** Acknowledge signal back to processor, signalling read data can be sampled */
+  /** Acknowledge signal back to processor, signalling read data can be sampled on next cc / write is being performed */
   val ack = WireDefault(false.B)
   /** Valid signal to memory, indicating a memory read should be performed */
   val memValid = WireDefault(false.B)
@@ -37,53 +37,18 @@ class Controller(c: CacheConfig) extends Module {
   val validData = tags(index) === tag && valid(index)
 
 
-  //Next state logic
+  //Next state logic and internal signal handling
   switch(state) {
-    //Idle state: Move out when a valid operation is received
-    is(sIdle) {
-      when(io.procReq) {
-        state := sOp
-      }
-    }
-    //Start operation state
-    //If read && data is already stored in cache, return that data on next cc
-    //If read && data is not already stored, go fetch that data
-    //If write && block is valid && block is not dirty, write into that block
     is(sOp) {
-      when(!io.we && validData) {
-        state := sRead
-      } .elsewhen(!io.we && !validData) {
+      when(io.procReq && !validData && !dirty(index)) { //non-cached, non-dirty access: Fetch new data
         state := sFetch
-      } .elsewhen(io.we && validData && !dirty(index)) {
-        state := sWrite
-      } .otherwise { //TODO: Implement write behaviour
-        state := sIdle
-      }
-    }
-    //Read data state
-    //If another read for valid data follows, stay here
-    //If another read for invalid data follows, go to fetch
-    is(sRead) {
-      when(io.procReq && validData && !io.we) {
-        state := sRead
-      } .elsewhen(io.procReq && !io.we) {
-        state := sFetch
-      } .otherwise { //TODO should go to op-state if operation is a write
-        state := sIdle
-      }
-    }
-    //Write from processor to cache state
-    //If another write to valid non-dirty block, stay here
-    //Otherwise, go to idle
-    is(sWrite) {
-      dirty(index) := true.B
-      //Just output ack? Cache module itself can update the data using state information
-      when(io.procReq && io.we && validData && !dirty(index)) {
-        state := sWrite
-      } .otherwise { //TODO handle subsequent reads or writes to dirty/non-valid locations
-        state := sIdle
+      } .elsewhen(io.procReq && !validData && dirty(index)) { //non-cached, dirty access: Writeback before fetching new data
+        state := sWriteback //TODO implement writeback
       }
 
+      when(io.procReq && io.we && validData) { //Write to cached address
+        dirty(index) := true.B
+      }
     }
     //Fetch data from memory state
     //Once data arrives, go to op-state and reset count register
@@ -98,12 +63,8 @@ class Controller(c: CacheConfig) extends Module {
 
   //Output generation logic
   switch(state) {
-    //Assert ack high to signal to processor that data has arrived
-    is(sRead) {
-      ack := true.B
-    }
-    is(sWrite) {
-      ack := true.B
+    is(sOp) {
+      ack := io.procReq && validData
     }
     //Issue the required number of reads, then wait until we leave this state
     //Assuming that we can issue reads immediately when we enter this state

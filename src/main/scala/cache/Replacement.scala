@@ -20,10 +20,11 @@ class Replacement(c: CacheConfig) extends Module{
   val finish = WireDefault(false.B)
 
 
+  //Data received from memory
   when(io.cache.memAck && progress < (c.memAccesesPerBlock-1).U) {
     we := we << WORDS_PER_CYCLE
     progress := progress + 1.U
-  } .elsewhen(io.cache.memAck) { //final memValid reset everything
+  } .elsewhen(io.cache.memAck) { //final group of data received, reset counters
     we := ((1 << WORDS_PER_CYCLE)-1).U(c.wordsPerBlock.W)
     progress := 0.U
     finish := true.B
